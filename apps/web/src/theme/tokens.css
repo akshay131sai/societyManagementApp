@@ -1,0 +1,263 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ==========================================================================
+   NestFlow design tokens
+
+   The four brand colours, the mode and the radius come from the society's
+   theme_settings row. Everything else is DERIVED at runtime in OKLCH by
+   src/theme/deriveTokens.ts and written onto <html> as custom properties.
+
+   The values below are the light-mode fallbacks used before /auth/me returns
+   (and by the pre-paint script in index.html). One CSS bundle serves every
+   society — there is no per-tenant stylesheet.
+   ========================================================================== */
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  /* Bridge the runtime custom properties into Tailwind's utility namespace,
+     so `bg-nf-primary` / `text-nf-muted` / `rounded-nf` stay in sync with the
+     society theme automatically. */
+  --color-nf-primary: var(--nf-primary);
+  --color-nf-primary-hover: var(--nf-primary-hover);
+  --color-nf-primary-active: var(--nf-primary-active);
+  --color-nf-primary-fg: var(--nf-primary-foreground);
+  --color-nf-primary-subtle: var(--nf-primary-subtle);
+
+  --color-nf-secondary: var(--nf-secondary);
+  --color-nf-secondary-fg: var(--nf-secondary-foreground);
+  --color-nf-accent: var(--nf-accent);
+  --color-nf-accent-fg: var(--nf-accent-foreground);
+
+  --color-nf-background: var(--nf-background);
+  --color-nf-surface: var(--nf-surface);
+  --color-nf-raised: var(--nf-surface-raised);
+  --color-nf-sidebar: var(--nf-sidebar);
+  --color-nf-sidebar-fg: var(--nf-sidebar-foreground);
+  --color-nf-sidebar-active: var(--nf-sidebar-active);
+
+  --color-nf-text: var(--nf-text);
+  --color-nf-muted: var(--nf-text-muted);
+  --color-nf-subtle: var(--nf-text-subtle);
+  --color-nf-border: var(--nf-border);
+  --color-nf-border-strong: var(--nf-border-strong);
+  --color-nf-ring: var(--nf-ring);
+
+  --color-nf-success: var(--nf-success);
+  --color-nf-success-subtle: var(--nf-success-subtle);
+  --color-nf-warning: var(--nf-warning);
+  --color-nf-warning-subtle: var(--nf-warning-subtle);
+  --color-nf-danger: var(--nf-danger);
+  --color-nf-danger-subtle: var(--nf-danger-subtle);
+  --color-nf-info: var(--nf-info);
+  --color-nf-info-subtle: var(--nf-info-subtle);
+
+  --radius-nf-sm: var(--nf-radius-sm);
+  --radius-nf: var(--nf-radius);
+  --radius-nf-lg: var(--nf-radius-lg);
+  --radius-nf-xl: var(--nf-radius-xl);
+}
+
+:root {
+  --nf-primary: #4f46e5;
+  --nf-primary-hover: #4338ca;
+  --nf-primary-active: #3730a3;
+  --nf-primary-foreground: #ffffff;
+  --nf-primary-subtle: #eef2ff;
+
+  --nf-secondary: #0ea5e9;
+  --nf-secondary-foreground: #ffffff;
+  --nf-accent: #8b5cf6;
+  --nf-accent-foreground: #ffffff;
+
+  --nf-background: #f7f8fa;
+  --nf-surface: #ffffff;
+  --nf-surface-raised: #ffffff;
+  --nf-sidebar: #101828;
+  --nf-sidebar-foreground: #cbd5e1;
+  --nf-sidebar-active: #1d2939;
+
+  --nf-text: #101828;
+  --nf-text-muted: #667085;
+  --nf-text-subtle: #98a2b3;
+  --nf-border: #e4e7ec;
+  --nf-border-strong: #d0d5dd;
+  --nf-ring: #4f46e5;
+
+  /* Semantic colours are fixed. Red must mean danger in every society. */
+  --nf-success: #059669;
+  --nf-success-subtle: #ecfdf5;
+  --nf-warning: #d97706;
+  --nf-warning-subtle: #fffbeb;
+  --nf-danger: #dc2626;
+  --nf-danger-subtle: #fef2f2;
+  --nf-info: #0284c7;
+  --nf-info-subtle: #f0f9ff;
+
+  --nf-radius: 14px;
+  --nf-radius-sm: calc(var(--nf-radius) - 6px);
+  --nf-radius-lg: calc(var(--nf-radius) + 4px);
+  --nf-radius-xl: calc(var(--nf-radius) + 10px);
+
+  --nf-shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.05);
+  --nf-shadow: 0 1px 3px 0 rgb(16 24 40 / 0.1), 0 1px 2px -1px rgb(16 24 40 / 0.06);
+  --nf-shadow-md: 0 4px 8px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --nf-shadow-lg: 0 12px 16px -4px rgb(16 24 40 / 0.08), 0 4px 6px -2px rgb(16 24 40 / 0.03);
+}
+
+/* Dark neutrals.
+   Two selectors, because "mode" has three states:
+     - explicit dark  -> [data-theme="dark"]
+     - explicit light -> [data-theme="light"], which must WIN over the media query
+     - system         -> no attribute, so prefers-color-scheme decides
+   Without the media block, a system-dark viewer on an unauthenticated screen
+   (where no JS has derived tokens yet) gets a dark background with light-mode
+   text — i.e. invisible text.
+
+   deriveTokens.ts overwrites these at runtime once a society theme loads;
+   these are the pre-JS fallbacks. */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --nf-background: #0b0f19;
+  --nf-surface: #131826;
+  --nf-surface-raised: #1a2032;
+  --nf-sidebar: #080b12;
+  --nf-sidebar-foreground: #94a3b8;
+  --nf-sidebar-active: #1a2032;
+
+  --nf-text: #f2f4f7;
+  --nf-text-muted: #98a2b3;
+  --nf-text-subtle: #667085;
+  --nf-border: #232a3b;
+  --nf-border-strong: #333c52;
+
+  --nf-success: #34d399;
+  --nf-success-subtle: #052e23;
+  --nf-warning: #fbbf24;
+  --nf-warning-subtle: #2e1e05;
+  --nf-danger: #f87171;
+  --nf-danger-subtle: #2e1010;
+  --nf-info: #38bdf8;
+  --nf-info-subtle: #05233a;
+
+  --nf-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --nf-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --nf-shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --nf-shadow-lg: 0 12px 16px -4px rgb(0 0 0 / 0.45), 0 4px 6px -2px rgb(0 0 0 / 0.3);
+  }
+}
+
+:root[data-theme="dark"] {
+  --nf-background: #0b0f19;
+  --nf-surface: #131826;
+  --nf-surface-raised: #1a2032;
+  --nf-sidebar: #080b12;
+  --nf-sidebar-foreground: #94a3b8;
+  --nf-sidebar-active: #1a2032;
+
+  --nf-text: #f2f4f7;
+  --nf-text-muted: #98a2b3;
+  --nf-text-subtle: #667085;
+  --nf-border: #232a3b;
+  --nf-border-strong: #333c52;
+
+  --nf-success: #34d399;
+  --nf-success-subtle: #052e23;
+  --nf-warning: #fbbf24;
+  --nf-warning-subtle: #2e1e05;
+  --nf-danger: #f87171;
+  --nf-danger-subtle: #2e1010;
+  --nf-info: #38bdf8;
+  --nf-info-subtle: #05233a;
+
+  --nf-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --nf-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --nf-shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --nf-shadow-lg: 0 12px 16px -4px rgb(0 0 0 / 0.45), 0 4px 6px -2px rgb(0 0 0 / 0.3);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--nf-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--nf-background);
+    color: var(--nf-text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* The page body must never scroll horizontally; wide content scrolls
+       inside its own container instead. */
+    overflow-x: hidden;
+  }
+
+  /* A visible focus ring is never removed without a replacement. */
+  :focus-visible {
+    outline: 2px solid var(--nf-ring);
+    outline-offset: 2px;
+    border-radius: var(--nf-radius-sm);
+  }
+
+  ::selection {
+    background-color: var(--nf-primary-subtle);
+    color: var(--nf-text);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .nf-shadow-sm {
+    box-shadow: var(--nf-shadow-sm);
+  }
+  .nf-shadow {
+    box-shadow: var(--nf-shadow);
+  }
+  .nf-shadow-md {
+    box-shadow: var(--nf-shadow-md);
+  }
+  .nf-shadow-lg {
+    box-shadow: var(--nf-shadow-lg);
+  }
+
+  /* Slim, unobtrusive scrollbars that respect the theme. */
+  .nf-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--nf-border-strong) transparent;
+  }
+  .nf-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .nf-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--nf-border-strong);
+    border-radius: 999px;
+  }
+  .nf-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

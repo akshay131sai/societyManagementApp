@@ -1,0 +1,32 @@
+# NestFlow API — Python 3.12+
+# Keep this list lean. Every addition needs a justification (see docs section "DO NOT OVERENGINEER").
+
+# --- Web framework -----------------------------------------------------------
+fastapi>=0.118,<1.0
+uvicorn[standard]>=0.34,<1.0
+python-multipart>=0.0.20          # multipart/form-data (logo upload)
+
+# --- Validation & settings ---------------------------------------------------
+pydantic>=2.10,<3.0
+pydantic-settings>=2.7,<3.0
+email-validator>=2.2
+
+# --- Database ----------------------------------------------------------------
+sqlalchemy[asyncio]>=2.0.36,<3.0
+alembic>=1.14,<2.0
+psycopg[binary,pool]>=3.2,<4.0    # PostgreSQL driver (sync + async), binary wheels
+greenlet>=3.1                     # required by SQLAlchemy asyncio bridge
+
+# --- Auth --------------------------------------------------------------------
+firebase-admin>=6.6,<8.0          # Admin SDK: ID token verification
+
+# --- Scheduling --------------------------------------------------------------
+apscheduler>=3.11,<4.0            # in-process cron. NOT Celery, NOT Redis.
+
+# --- Logging -----------------------------------------------------------------
+structlog>=24.4
+
+# --- Testing -----------------------------------------------------------------
+pytest>=8.3
+pytest-asyncio>=0.25
+httpx>=0.28                       # ASGI transport for API tests

@@ -1,0 +1,31 @@
+{
+  "name": "nestflow",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-tenant society and apartment management SaaS for the Indian market",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "preview": "npm run preview --workspace apps/web",
+    "typecheck": "npm run typecheck --workspace apps/web",
+    "lint": "npm run lint --workspace apps/web",
+
+    "api:dev": "cd apps/api && .venv/Scripts/python run.py",
+    "api:dev:unix": "cd apps/api && .venv/bin/python run.py",
+    "api:test": "cd apps/api && .venv/Scripts/python -m pytest",
+    "api:migrate": "cd apps/api && .venv/Scripts/python -m alembic -c alembic.central.ini upgrade head",
+    "api:migrate:tenants": "cd apps/api && .venv/Scripts/python -m app.cli migrate-tenants",
+    "api:societies": "cd apps/api && .venv/Scripts/python -m app.cli list-societies",
+
+    "db:up": "docker compose -f infrastructure/docker-compose.yml up -d",
+    "db:down": "docker compose -f infrastructure/docker-compose.yml down",
+    "db:logs": "docker compose -f infrastructure/docker-compose.yml logs -f postgres"
+  }
+}

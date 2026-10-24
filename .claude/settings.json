@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -nB2 -A8 '\"/roles\"\\\\|\"/permissions\"\\\\|/roles/{' app/api/v1/society.py)",
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(curl -s -H \"Authorization: Bearer dev:admin@greenvalley.in\" \"http://127.0.0.1:8001/api/v1/water/society-trend?months=12\")",
+      "Bash(python -c ' *)",
+      "Bash(.venv/Scripts/python -m pytest \"tests/test_operations.py::test_a_pre_approval_produces_a_code_that_opens_the_gate_once\" -q)",
+      "Bash(grep -E \"assert|Error|tests\\\\\\\\\\\\\\\\|E \")",
+      "Bash(.venv/Scripts/python -m pytest \"tests/test_operations.py::test_a_pre_approval_produces_a_code_that_opens_the_gate_once\")",
+      "Bash(.venv/Scripts/python -m pytest tests/test_utilities_aggregate.py tests/test_operations.py -q)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_utilities_aggregate.py tests/test_operations.py)",
+      "Bash(.venv/Scripts/python -m pytest --tb=long)",
+      "Bash(.venv/Scripts/python -m pytest -p no:randomly --tb=long)",
+      "Bash(.venv/Scripts/python -m pip list)",
+      "Bash(.venv/Scripts/python -m pytest --collect-only -q)"
+    ]
+  }
+}

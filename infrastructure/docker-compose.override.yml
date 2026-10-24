@@ -1,0 +1,22 @@
+# Local-machine overrides. Not part of the documented setup.
+#
+# 1. Port: 5433 is occupied on this machine by an unrelated project's
+#    container, so the nestflow database is published on 5435 instead.
+# 2. Volume: the pre-existing data volume is named `nestflow_pgdata` (created
+#    before this compose project existed). Declared external so Compose reuses
+#    it instead of creating an empty `infrastructure_nestflow_pgdata`.
+#
+# Apply with:
+#   docker compose -f infrastructure/docker-compose.yml \
+#                  -f infrastructure/docker-compose.override.yml up -d
+
+services:
+  postgres:
+    ports: !override
+      - "5435:5432"
+    volumes:
+      - nestflow_pgdata:/var/lib/postgresql/data
+
+volumes:
+  nestflow_pgdata:
+    external: true

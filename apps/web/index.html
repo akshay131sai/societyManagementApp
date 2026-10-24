@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#4F46E5" />
+    <meta
+      name="description"
+      content="NestFlow — society and apartment management for Indian housing societies."
+    />
+    <title>NestFlow</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>
+      /*
+       * Pre-paint theme.
+       *
+       * Runs before React mounts so a returning user never sees a white flash
+       * or the wrong brand colour. This reads a CACHE — the authoritative
+       * theme arrives with /auth/me a moment later and overwrites it.
+       */
+      (function () {
+        try {
+          var lastSociety = localStorage.getItem("nf.theme.last");
+          var raw = lastSociety && localStorage.getItem("nf.theme." + lastSociety);
+          var theme = raw ? JSON.parse(raw) : null;
+          var root = document.documentElement;
+
+          var mode = theme && theme.themeMode ? theme.themeMode : "system";
+          var resolved =
+            mode === "system"
+              ? window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : mode;
+
+          if (mode !== "system") root.setAttribute("data-theme", mode);
+          root.dataset.resolvedTheme = resolved;
+          root.style.colorScheme = resolved;
+
+          if (theme) {
+            /* Only a strict hex is written into a custom property. */
+            var hex = /^#[0-9A-Fa-f]{6}$/;
+            if (hex.test(theme.primaryColor || "")) {
+              root.style.setProperty("--nf-primary", theme.primaryColor);
+              root.style.setProperty("--nf-ring", theme.primaryColor);
+            }
+            if (hex.test(theme.sidebarColor || "")) {
+              root.style.setProperty("--nf-sidebar", theme.sidebarColor);
+            }
+            var radius = Number(theme.borderRadius);
+            if (radius >= 0 && radius <= 32) {
+              root.style.setProperty("--nf-radius", radius + "px");
+            }
+          }
+        } catch (e) {
+          /* Blocked storage: the default theme applies. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui, sans-serif">
+        <h1>JavaScript is required</h1>
+        <p>NestFlow needs JavaScript enabled to run. Please enable it and reload this page.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
