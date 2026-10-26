@@ -61,6 +61,19 @@ async def test_creating_a_building_seeds_a_default_block(
     assert seeded[0]["code"] == "M"
 
 
+async def test_creating_a_block_returns_its_building_name(
+    client: AsyncClient, society_a: SocietyFixture, building: dict[str, Any]
+) -> None:
+    """The fresh block sits in the identity map without its building loaded."""
+    response = await client.post(
+        "/blocks",
+        headers=auth(society_a.admin_token),
+        json={"building_id": building["id"], "name": "Wing B", "code": "B"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["data"]["building_name"] == building["name"]
+
+
 async def test_duplicate_building_code_is_refused(
     client: AsyncClient, society_a: SocietyFixture, building: dict[str, Any]
 ) -> None:

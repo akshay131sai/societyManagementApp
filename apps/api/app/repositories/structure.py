@@ -102,7 +102,11 @@ class BlockRepository:
         self.session = session
 
     async def get(self, block_id: uuid.UUID) -> Block | None:
-        return await self.session.get(Block, block_id)
+        # populate_existing: a block created in this session is already in the
+        # identity map without its building, and an async lazy load would fail.
+        return await self.session.get(
+            Block, block_id, options=[selectinload(Block.building)], populate_existing=True
+        )
 
     async def get_by_code(self, building_id: uuid.UUID, code: str) -> Block | None:
         return await self.session.scalar(
