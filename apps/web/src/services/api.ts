@@ -6,9 +6,7 @@
  * component ever touches `fetch` directly.
  */
 
-import { getIdToken } from "@/services/auth";
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+import { API_BASE_URL as BASE_URL, getAccessToken, refreshAccessToken } from "@/services/tokens";
 
 export interface Envelope<T> {
   success: true;
@@ -93,7 +91,7 @@ function buildUrl(path: string, query?: Query): string {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, query, signal } = options;
 
-  const token = await getIdToken();
+  const token = await getAccessToken().catch(() => null);
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -131,11 +129,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok || payload.success === false) {
     const error = new ApiError(response.status, payload as ErrorEnvelope);
 
-    // A single retry after forcing a token refresh: an ID token can expire
-    // mid-session and the user should not see that.
-    if (error.isAuthError && error.code === "TOKEN_EXPIRED" && !options._retried) {
-      await getIdToken(true);
-      return request<T>(path, { ...options, _retried: true });
+    // A single retry after refreshing: the access token can expire between
+    // the check in getAccessToken and the server reading it (clock skew, a
+    // laptop waking from sleep), and the user should not see that. If the
+    // refresh itself is refused, the session has ended and the error stands.
+    const staleToken = error.code === "TOKEN_EXPIRED" || error.code === "TOKEN_INVALID";
+    if (error.isAuthError && staleToken && token && !options._retried) {
+      const fresh = await refreshAccessToken().catch(() => null);
+      if (fresh) return request<T>(path, { ...options, _retried: true });
     }
     throw error;
   }

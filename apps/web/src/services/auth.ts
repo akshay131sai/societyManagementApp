@@ -1,23 +1,32 @@
 /**
  * Authentication.
  *
- * Firebase owns identity; NestFlow owns authorization. This module deals only
- * with obtaining an ID token — every access decision happens server-side.
+ * Firebase owns identity; NestFlow owns authorization and the session. This
+ * module proves identity once, at sign-in, and hands the provider's token to
+ * `/auth/login`, which returns NestFlow's access and refresh tokens (see
+ * `services/tokens.ts`). Every access decision happens server-side.
  *
- * Two providers behind one interface, selected by `VITE_AUTH_PROVIDER`:
+ * Three providers behind one interface, selected by `VITE_AUTH_PROVIDER` (it
+ * must match the backend's `AUTH_PROVIDER`):
  *
+ *   password — email and password, checked by the NestFlow API itself.
  *   firebase — the real Firebase Auth SDK, loaded lazily so its ~120 KB never
  *              lands in the entry chunk.
- *   dev      — mints a `dev:<email>` token for local work before a Firebase
- *              project exists. The backend refuses this in production.
+ *   dev      — sends `dev:<email>`, no password, for local work only. The
+ *              backend refuses this in production.
  */
 
-export type AuthProvider = "firebase" | "dev";
+import { api } from "@/services/api";
+import * as tokens from "@/services/tokens";
+
+export type AuthProvider = "password" | "firebase" | "dev";
 
 export const AUTH_PROVIDER: AuthProvider =
   (import.meta.env.VITE_AUTH_PROVIDER as AuthProvider) ?? "dev";
 
 export const IS_DEV_AUTH = AUTH_PROVIDER === "dev";
+export const IS_PASSWORD_AUTH = AUTH_PROVIDER === "password";
+const IS_FIREBASE_AUTH = AUTH_PROVIDER === "firebase";
 
 export interface AuthUser {
   uid: string;
@@ -25,8 +34,6 @@ export interface AuthUser {
   displayName: string | null;
   emailVerified: boolean;
 }
-
-const DEV_SESSION_KEY = "nf.dev.session";
 
 type Listener = (user: AuthUser | null) => void;
 const listeners = new Set<Listener>();
@@ -53,7 +60,7 @@ let firebaseAuthPromise: Promise<FirebaseAuth> | null = null;
 async function getFirebaseAuth(): Promise<FirebaseAuth> {
   if (!firebaseAuthPromise) {
     firebaseAuthPromise = (async () => {
-      const [{ initializeApp, getApps }, { getAuth, onAuthStateChanged }] = await Promise.all([
+      const [{ initializeApp, getApps }, { getAuth }] = await Promise.all([
         import("firebase/app"),
         import("firebase/auth"),
       ]);
@@ -68,22 +75,9 @@ async function getFirebaseAuth(): Promise<FirebaseAuth> {
       };
 
       const app = getApps().length ? getApps()[0] : initializeApp(config);
-      const auth = getAuth(app);
-
-      onAuthStateChanged(auth, (user) => {
-        emit(
-          user
-            ? {
-                uid: user.uid,
-                email: user.email ?? "",
-                displayName: user.displayName,
-                emailVerified: user.emailVerified,
-              }
-            : null,
-        );
-      });
-
-      return auth;
+      // Firebase's own signed-in state is not followed: the NestFlow session
+      // (services/tokens.ts) is what decides whether someone is signed in.
+      return getAuth(app);
     })();
   }
   return firebaseAuthPromise;
@@ -93,106 +87,101 @@ async function getFirebaseAuth(): Promise<FirebaseAuth> {
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
 
+function userFromClaims(claims: tokens.AccessClaims, displayName: string | null = null): AuthUser {
+  return { uid: claims.sub, email: claims.email, displayName, emailVerified: true };
+}
+
+/** Start a NestFlow session and publish the user. */
+async function startSession(
+  credentials: tokens.LoginCredentials,
+  displayName: string | null = null,
+): Promise<AuthUser> {
+  const user = userFromClaims(await tokens.login(credentials), displayName);
+  emit(user);
+  return user;
+}
+
 export async function signInWithEmail(email: string, password: string): Promise<AuthUser> {
+  if (IS_PASSWORD_AUTH) {
+    return startSession({ email: email.trim().toLowerCase(), password });
+  }
   if (IS_DEV_AUTH) {
-    const user: AuthUser = {
-      uid: `dev-uid-${email.toLowerCase()}`,
-      email: email.toLowerCase(),
-      displayName: null,
-      emailVerified: true,
-    };
-    sessionStorage.setItem(DEV_SESSION_KEY, user.email);
-    emit(user);
-    return user;
+    return startSession({ id_token: `dev:${email.trim().toLowerCase()}` });
   }
 
   const { signInWithEmailAndPassword } = await import("firebase/auth");
   const auth = await getFirebaseAuth();
   const credential = await signInWithEmailAndPassword(auth, email, password);
-  return {
-    uid: credential.user.uid,
-    email: credential.user.email ?? "",
-    displayName: credential.user.displayName,
-    emailVerified: credential.user.emailVerified,
-  };
+  return startSession({ id_token: await credential.user.getIdToken() }, credential.user.displayName);
 }
 
 export async function signInWithGoogle(): Promise<AuthUser> {
-  if (IS_DEV_AUTH) {
+  if (!IS_FIREBASE_AUTH) {
     throw new Error("Google sign-in requires a configured Firebase project.");
   }
   const { GoogleAuthProvider, signInWithPopup } = await import("firebase/auth");
   const auth = await getFirebaseAuth();
   const credential = await signInWithPopup(auth, new GoogleAuthProvider());
-  return {
-    uid: credential.user.uid,
-    email: credential.user.email ?? "",
-    displayName: credential.user.displayName,
-    emailVerified: credential.user.emailVerified,
-  };
+  return startSession({ id_token: await credential.user.getIdToken() }, credential.user.displayName);
 }
 
+/** Firebase only. With password sign-in an administrator resets passwords. */
 export async function sendPasswordReset(email: string): Promise<void> {
-  if (IS_DEV_AUTH) return;
+  if (!IS_FIREBASE_AUTH) return;
   const { sendPasswordResetEmail } = await import("firebase/auth");
   const auth = await getFirebaseAuth();
   await sendPasswordResetEmail(auth, email);
 }
 
 export async function signOut(): Promise<void> {
-  if (IS_DEV_AUTH) {
-    sessionStorage.removeItem(DEV_SESSION_KEY);
-    emit(null);
-    return;
+  await tokens.logout();
+  if (IS_FIREBASE_AUTH) {
+    const { signOut: fbSignOut } = await import("firebase/auth");
+    const auth = await getFirebaseAuth();
+    await fbSignOut(auth);
   }
-  const { signOut: fbSignOut } = await import("firebase/auth");
-  const auth = await getFirebaseAuth();
-  await fbSignOut(auth);
   emit(null);
 }
 
 /**
- * Current ID token, or null when signed out.
- *
- * The Firebase SDK refreshes automatically; `forceRefresh` is used by the API
- * client's single retry after a `TOKEN_EXPIRED`.
+ * Change the signed-in user's own password. The server signs out every other
+ * session and returns a fresh pair for this one.
  */
-export async function getIdToken(forceRefresh = false): Promise<string | null> {
-  if (IS_DEV_AUTH) {
-    const email = sessionStorage.getItem(DEV_SESSION_KEY);
-    return email ? `dev:${email}` : null;
-  }
-
-  const auth = await getFirebaseAuth();
-  const user = auth.currentUser;
-  if (!user) return null;
-  return user.getIdToken(forceRefresh);
-}
-
-/** Restore a session on page load, before React renders. */
-export async function restoreSession(): Promise<AuthUser | null> {
-  if (IS_DEV_AUTH) {
-    const email = sessionStorage.getItem(DEV_SESSION_KEY);
-    const user = email
-      ? { uid: `dev-uid-${email}`, email, displayName: null, emailVerified: true }
-      : null;
-    emit(user);
-    return user;
-  }
-
-  const auth = await getFirebaseAuth();
-  // onAuthStateChanged fires once with the restored (or null) user.
-  return new Promise((resolve) => {
-    const unsubscribe = onAuthChange((user) => {
-      unsubscribe();
-      resolve(user);
-    });
-    void auth;
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const pair = await api.post<tokens.TokenResponse>("/auth/password", {
+    current_password: currentPassword,
+    new_password: newPassword,
   });
+  tokens.acceptTokens(pair);
 }
+
+/** Current NestFlow access token, refreshed if about to expire; null when signed out. */
+export const getAccessToken = tokens.getAccessToken;
+
+/**
+ * Restore a session on page load, before React renders.
+ *
+ * The stored refresh token is the session; the identity provider is not
+ * consulted, so Firebase's SDK stays unloaded until someone signs in again.
+ */
+export async function restoreSession(): Promise<AuthUser | null> {
+  let user: AuthUser | null = null;
+  if (tokens.hasSession()) {
+    const token = await tokens.getAccessToken().catch(() => null);
+    const claims = token ? tokens.decodeAccessToken(token) : null;
+    user = claims ? userFromClaims(claims) : null;
+  }
+  emit(user);
+  return user;
+}
+
+// A refresh the server refused, or a sign-out in another tab, ends this tab's
+// session too.
+tokens.onSessionEnd(() => emit(null));
 
 /** Firebase error codes rendered as something a person can act on. */
 export function describeAuthError(error: unknown): string {
+  if (error instanceof tokens.SessionError) return error.message;
   const code = (error as { code?: string })?.code ?? "";
   switch (code) {
     case "auth/invalid-credential":

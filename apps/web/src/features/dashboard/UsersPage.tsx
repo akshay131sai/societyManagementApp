@@ -1,4 +1,4 @@
-import { Plus, Users } from "lucide-react";
+import { KeyRound, Plus, Users } from "lucide-react";
 import * as React from "react";
 import { useForm } from "react-hook-form";
 
@@ -20,7 +20,9 @@ import {
   NFSelect,
   NFStatusBadge,
 } from "@/components/nestflow/primitives";
+import { PASSWORD_HINT, SetPasswordDialog, newPasswordRules } from "@/features/auth/passwords";
 import { ApiError, api, type Page } from "@/services/api";
+import { IS_PASSWORD_AUTH } from "@/services/auth";
 import { useAppSelector } from "@/store";
 import type { Role, TenantUser } from "@/types";
 import { formatDate, formatPhone } from "@/utils/format";
@@ -31,12 +33,17 @@ interface CreateForm {
   full_name: string;
   phone: string;
   role_code: string;
+  password: string;
 }
 
 export default function UsersPage() {
   const principal = useAppSelector((s) => s.auth.principal);
   const canCreate = hasPermission(principal, "user.create");
   const canAssignRoles = hasPermission(principal, "role.assign");
+  // Mirrors the API: resetting a password needs user.update *and* role.assign.
+  const canSetPasswords =
+    IS_PASSWORD_AUTH && canAssignRoles && hasPermission(principal, "user.update");
+  const [passwordFor, setPasswordFor] = React.useState<TenantUser | null>(null);
 
   const [data, setData] = React.useState<Page<TenantUser> | null>(null);
   const [roles, setRoles] = React.useState<Role[]>([]);
@@ -95,6 +102,7 @@ export default function UsersPage() {
         full_name: values.full_name,
         phone: values.phone || null,
         role_codes: [values.role_code],
+        ...(IS_PASSWORD_AUTH ? { password: values.password } : {}),
       });
       setCreateOpen(false);
       reset();
@@ -157,6 +165,20 @@ export default function UsersPage() {
         </span>
       ),
     },
+    ...(canSetPasswords
+      ? [
+          {
+            key: "actions",
+            header: "",
+            className: "text-right",
+            render: (u: TenantUser) => (
+              <NFButton variant="ghost" size="sm" onClick={() => setPasswordFor(u)}>
+                <KeyRound /> Set password
+              </NFButton>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -241,7 +263,11 @@ export default function UsersPage() {
           }
         }}
         title="Add a member"
-        description="They can sign in with this email once their identity provider account exists."
+        description={
+          IS_PASSWORD_AUTH
+            ? "They sign in with this email and the password you set here."
+            : "They can sign in with this email once their identity provider account exists."
+        }
         footer={
           <>
             <NFButton variant="secondary" onClick={() => setCreateOpen(false)}>
@@ -307,8 +333,39 @@ export default function UsersPage() {
               ))}
             </NFSelect>
           </NFField>
+
+          {IS_PASSWORD_AUTH && (
+            <NFField
+              label="Password"
+              htmlFor="password"
+              error={errors.password?.message}
+              hint={PASSWORD_HINT}
+              required
+            >
+              <NFInput
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                invalid={!!errors.password}
+                {...register("password", {
+                  required: "Set the password they will sign in with.",
+                  ...newPasswordRules,
+                })}
+              />
+            </NFField>
+          )}
         </form>
       </NFDialog>
+
+      {passwordFor && (
+        <SetPasswordDialog
+          open
+          onOpenChange={(o) => !o && setPasswordFor(null)}
+          endpoint={`/users/${passwordFor.id}/password`}
+          name={passwordFor.full_name}
+          email={passwordFor.email}
+        />
+      )}
     </>
   );
 }

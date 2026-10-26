@@ -43,16 +43,23 @@ All endpoints live under `{prefix}`.
 
 ## Authentication
 
-Click **Authorize** and paste a bearer token (without the `Bearer ` prefix).
+Every endpoint except `/auth/login`, `/auth/refresh`, `/auth/logout` and
+`/health` requires a NestFlow **access token** (a JWT).
+
+1. Call `POST {prefix}/auth/login` with `{{"id_token": "..."}}` (see below).
+2. Copy `access_token` from the response, click **Authorize**, and paste it
+   (without the `Bearer ` prefix).
+3. The access token lasts `expires_in` seconds. Call `POST {prefix}/auth/refresh`
+   with the `refresh_token` for a new pair — each refresh token works once.
 {auth_help}
 The token is remembered across page reloads in this browser.
 """
 
 _DEV_AUTH_HELP = """
-**Development auth is active.** The token is `dev:<email>` of any existing
-user — no password is checked. For example:
+**Development auth is active.** The `id_token` for `/auth/login` is
+`dev:<email>` of any existing user — no password is checked. For example:
 
-| Token | Role |
+| `id_token` | Role |
 |---|---|
 | `dev:superadmin@nestflow.in` | Super admin (platform endpoints) |
 | `dev:admin@greenvalley.in` | Society admin — Green Valley Residency |
@@ -63,8 +70,8 @@ Seeded users vary by database; `python -m app.cli list-societies` shows what exi
 """
 
 _FIREBASE_AUTH_HELP = """
-The token is a Firebase ID token. Sign in to the web app and copy it from
-`firebase.auth().currentUser.getIdToken()`.
+The `id_token` for `/auth/login` is a Firebase ID token. Sign in to the web app
+and copy it from `firebase.auth().currentUser.getIdToken()`.
 """
 
 SWAGGER_UI_PARAMETERS: dict[str, Any] = {

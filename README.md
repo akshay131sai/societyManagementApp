@@ -38,6 +38,7 @@ python -m venv .venv
 
 .venv/Scripts/python -m alembic -c alembic.central.ini upgrade head
 .venv/Scripts/python -m app.cli bootstrap --email you@example.com --name "Your Name"
+.venv/Scripts/python -m app.cli set-password --email you@example.com   # prompts
 .venv/Scripts/python run.py                                  # http://localhost:8000
 
 # 4. Frontend (new terminal)
@@ -47,8 +48,8 @@ npm run dev                                                  # http://localhost:
 ```
 
 Sign in at <http://localhost:5173/login> with the email you passed to
-`bootstrap`. No Firebase project is needed yet — see
-[Development authentication](#development-authentication).
+`bootstrap` and the password you just set. No Firebase project is needed — see
+[Authentication](#authentication).
 
 **API docs:** <http://localhost:8000/docs>
 
@@ -305,13 +306,34 @@ ones** — for system roles only, leaving any society-specific custom role alone
 
 ---
 
-## Development authentication
+## Authentication
 
-No Firebase project is required to run NestFlow locally. With
-`AUTH_PROVIDER=dev`, the API accepts `dev:<email>` as a bearer token and the
-login screen ignores the password field.
+`AUTH_PROVIDER` picks how people prove who they are; the frontend's
+`VITE_AUTH_PROVIDER` must match.
 
-Three independent safeties keep this out of production:
+| Provider | Sign-in | Use |
+|---|---|---|
+| `password` (default) | Email + password, checked by the API against a scrypt hash in `platform_users` | Any environment |
+| `firebase` | Firebase ID token | When a Firebase project is configured |
+| `dev` | Any registered email, **no password** | Local experiments only |
+
+Whichever is used, `/auth/login` then issues NestFlow's own JWT access and
+refresh tokens (docs/architecture/authentication.md). With `password`:
+
+- The super admin sets each society administrator's password when creating the
+  society; administrators set passwords for the members they add, and residents
+  for family members they give access to.
+- Administrators reset a password from **Users & roles** (society) or **Platform
+  users** (super admin). Everyone changes their own under **Profile**.
+- `python -m app.cli set-password --email <email>` sets one from the server.
+- Passwords need 8+ characters with a letter and a number. Wrong email, wrong
+  password and "no password set" all get the same answer, so the login form
+  does not reveal which emails exist. Setting a password signs the account out
+  everywhere.
+
+### `dev` provider safeties
+
+Three independent safeties keep `dev` out of production:
 
 1. `Settings` **raises at import** if `ENVIRONMENT=production` and
    `AUTH_PROVIDER=dev` — the process will not boot.

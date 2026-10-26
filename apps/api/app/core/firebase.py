@@ -150,6 +150,26 @@ class DevTokenVerifier:
         )
 
 
+class PasswordProvider:
+    """``AUTH_PROVIDER=password``: there is no identity token to verify.
+
+    ``/auth/login`` checks the email and password itself
+    (:mod:`app.auth.passwords`). This class exists so ``name`` reports the
+    provider to ``/auth/me`` and ``/health``, and so an ``id_token`` sent to a
+    password server is refused rather than silently accepted.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    @property
+    def name(self) -> str:
+        return "password"
+
+    def verify(self, token: str) -> FirebaseIdentity:
+        raise TokenInvalidError("This server signs in with an email address and password.")
+
+
 _verifier: TokenVerifier | None = None
 
 
@@ -159,6 +179,8 @@ def get_token_verifier() -> TokenVerifier:
         settings = get_settings()
         if settings.AUTH_PROVIDER is AuthProvider.FIREBASE:
             _verifier = FirebaseTokenVerifier(settings)
+        elif settings.AUTH_PROVIDER is AuthProvider.PASSWORD:
+            _verifier = PasswordProvider(settings)
         else:
             _verifier = DevTokenVerifier(settings)
             log.warning(

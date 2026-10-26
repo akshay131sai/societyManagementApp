@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from app.api.deps import CentralSession, SuperAdmin, TenantManager
 from app.core.errors import NotFoundError
 from app.models.central import SocietyStatus
+from app.schemas.auth import PasswordSet
 from app.schemas.common import Envelope, Page, PageParams, ok
 from app.schemas.platform import (
     PlanCreate,
@@ -440,6 +441,31 @@ async def list_platform_users(
             total=total,
         )
     )
+
+
+@router.post(
+    "/users/{user_id}/password",
+    response_model=Envelope[dict],
+    summary="Set or reset a platform user's password",
+    description=(
+        "Any account — a society's administrator or another platform "
+        "administrator. Signs the account out of every device."
+    ),
+)
+async def set_platform_user_password(
+    user_id: uuid.UUID,
+    body: PasswordSet,
+    principal: SuperAdmin,
+    central: CentralSession,
+) -> dict[str, Any]:
+    from app.models.central import PlatformUser
+    from app.services.credentials import CredentialService
+
+    account = await central.get(PlatformUser, user_id)
+    if account is None:
+        raise NotFoundError("User not found.")
+    await CredentialService(central).set_password(account, body.password)
+    return ok({"password_set": True}, message="Password updated.")
 
 
 @router.get("/audit-logs", response_model=Envelope[Page[dict]], summary="Platform audit log")

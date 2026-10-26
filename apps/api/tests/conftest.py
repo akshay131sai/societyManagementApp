@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 
 import pytest
@@ -34,6 +34,11 @@ os.environ["RATE_LIMIT_ENABLED"] = "false"
 # asserts the disabled path, and a developer whose .env enables the scheduler
 # would otherwise see it fail for a reason that has nothing to do with them.
 os.environ["SCHEDULER_ENABLED"] = "false"
+
+# Fixtures sign in as `dev:<email>`, so the suite runs on the dev provider
+# whatever the developer's .env uses. tests/test_passwords.py switches to the
+# password provider for its own tests with the `password_mode` fixture.
+os.environ["AUTH_PROVIDER"] = "dev"
 
 from app.core.config import get_settings  # noqa: E402
 from app.core.eventloop import IS_WINDOWS  # noqa: E402
@@ -67,8 +72,43 @@ SUPER_ADMIN_EMAIL = "test-superadmin@nestflow.in"
 SUPER_ADMIN_TOKEN = f"dev:{SUPER_ADMIN_EMAIL}"
 
 
+def access_token(token: str) -> str:
+    """Turn a ``dev:<email>`` identity into the access token login would issue.
+
+    Fixtures carry identities, not access tokens: an access token expires, and a
+    session-scoped fixture outlives it. Minting per call keeps the hundreds of
+    request tests on the real bearer path without each one calling
+    ``/auth/login`` — which tests/test_auth.py exercises on its own. Anything
+    else passes through untouched, so malformed-token tests stay malformed.
+    """
+    if not token.startswith("dev:"):
+        return token
+    from app.auth.tokens import create_access_token
+    from app.core.firebase import DevTokenVerifier, get_settings
+
+    identity = DevTokenVerifier(get_settings()).verify(token)
+    return create_access_token(uid=identity.uid, email=identity.email)
+
+
 def auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": f"Bearer {access_token(token)}"}
+
+
+@pytest.fixture
+def password_mode() -> Iterator[None]:
+    """Run one test with ``AUTH_PROVIDER=password``."""
+    from app.core.config import AuthProvider
+    from app.core.firebase import reset_token_verifier
+
+    settings = get_settings()
+    previous = settings.AUTH_PROVIDER
+    settings.AUTH_PROVIDER = AuthProvider.PASSWORD
+    reset_token_verifier()
+    try:
+        yield
+    finally:
+        settings.AUTH_PROVIDER = previous
+        reset_token_verifier()
 
 
 @pytest_asyncio.fixture(scope="session")

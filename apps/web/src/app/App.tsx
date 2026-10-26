@@ -10,6 +10,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import AppRoutes from "@/routes";
 import { restoreSession } from "@/services/auth";
+import { onSessionEnd } from "@/services/tokens";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { bootstrapSession, setUnauthenticated } from "@/store/authSlice";
 import { fromPayload, setTheme } from "@/store/themeSlice";
@@ -77,6 +78,10 @@ export default function App() {
       }
     })();
   }, [dispatch]);
+
+  // The refresh token was refused (expired, revoked, account disabled) or
+  // another tab signed out: drop to the login screen.
+  React.useEffect(() => onSessionEnd(() => dispatch(setUnauthenticated())), [dispatch]);
 
   return (
     <BrowserRouter>

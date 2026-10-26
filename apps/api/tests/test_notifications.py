@@ -397,12 +397,26 @@ async def test_the_socket_refuses_a_connection_without_a_token() -> None:
 async def test_the_socket_refuses_a_bad_token() -> None:
     from starlette.websockets import WebSocketDisconnect
 
+    from tests.conftest import access_token
+
+    token = access_token("dev:nobody@nowhere.test")
     with pytest.raises(WebSocketDisconnect) as caught:
-        with _ws_client().websocket_connect("/api/v1/ws?token=dev:nobody@nowhere.test"):
+        with _ws_client().websocket_connect(f"/api/v1/ws?token={token}"):
             pass
     # The same guard chain as a REST request, so an unregistered identity is
     # refused at the handshake rather than after connecting.
     assert caught.value.code == 1008
+
+
+async def test_the_socket_refuses_an_identity_token() -> None:
+    """Only ``/auth/login`` accepts the provider's token; the socket wants an access token."""
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with _ws_client().websocket_connect("/api/v1/ws?token=dev:nobody@nowhere.test"):
+            pass
+    assert caught.value.code == 1008
+    assert caught.value.reason == "TOKEN_INVALID"
 
 
 # --------------------------------------------------------------------------- #

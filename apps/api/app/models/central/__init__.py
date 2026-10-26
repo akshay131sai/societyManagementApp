@@ -14,6 +14,7 @@ from app.models.central.enums import (
 from app.models.central.registry import DatabaseRegistry
 from app.models.central.society import Society, SocietyAdminAssignment
 from app.models.central.subscription import Subscription, SubscriptionPlan
+from app.models.central.token import RefreshToken
 from app.models.central.user import PlatformUser
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "PlatformAuditLog",
     "PlatformUser",
     "ProvisioningState",
+    "RefreshToken",
     "Society",
     "SocietyAdminAssignment",
     "SocietyStatus",

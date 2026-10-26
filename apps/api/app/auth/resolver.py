@@ -79,7 +79,7 @@ class PrincipalResolver:
         tenant roles. Each step is a hard gate, and the tenant database is not
         touched until the society and subscription have both passed.
         """
-        platform_user = await self._load_platform_user(identity)
+        platform_user = await self.load_platform_user(identity)
 
         # --- Super admin: platform scope, no tenant session ever ------------
         if platform_user.is_super_admin:
@@ -140,7 +140,12 @@ class PrincipalResolver:
 
     # ------------------------------------------------------------------ #
 
-    async def _load_platform_user(self, identity: FirebaseIdentity) -> PlatformUser:
+    async def load_platform_user(self, identity: FirebaseIdentity) -> PlatformUser:
+        """The account behind an identity: registered, linked and active.
+
+        Used alone by ``POST /auth/login``, which issues tokens to any active
+        account and leaves society and subscription gates to the first request.
+        """
         repo = PlatformUserRepository(self.central)
         user = await repo.get_by_firebase_uid(identity.uid)
 

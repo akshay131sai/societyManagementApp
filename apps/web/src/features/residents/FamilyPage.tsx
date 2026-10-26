@@ -6,9 +6,9 @@
  * narrowed server-side by `principal.flat_ids`, so there is no flat filter here
  * and no way to page into a neighbour's household.
  *
- * Access is granted by email only. No password is set or collected anywhere —
- * the account is created with a placeholder identity that binds on first
- * sign-in.
+ * Access is granted by email. With password sign-in the resident also sets the
+ * member's password here; otherwise the account is created with a placeholder
+ * identity that binds on first sign-in.
  */
 
 import { KeyRound, ShieldOff, Trash2, UserPlus, UsersRound } from "lucide-react";
@@ -26,7 +26,9 @@ import {
   NFSelect,
   NFStatusBadge,
 } from "@/components/nestflow/primitives";
+import { PASSWORD_HINT, newPasswordRules } from "@/features/auth/passwords";
 import { ApiError, api, type Page } from "@/services/api";
+import { IS_PASSWORD_AUTH } from "@/services/auth";
 import {
   FAMILY_ACCESS_LEVELS,
   FAMILY_RELATIONSHIPS,
@@ -389,13 +391,14 @@ function GrantAccessDialog({
     reset,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<{ email: string; access_level: FamilyAccessLevel | "" }>();
+  } = useForm<{ email: string; access_level: FamilyAccessLevel | ""; password: string }>();
 
   React.useEffect(() => {
     setError(null);
     reset({
       email: member?.email ?? "",
       access_level: member?.access_level === "NONE" ? "" : (member?.access_level ?? ""),
+      password: "",
     });
   }, [member, reset]);
 
@@ -409,6 +412,7 @@ function GrantAccessDialog({
       await api.post(`/family-members/${member.id}/access`, {
         access_level: values.access_level,
         email: values.email,
+        ...(IS_PASSWORD_AUTH && values.password ? { password: values.password } : {}),
       });
       onClose();
       await onSaved();
@@ -422,7 +426,11 @@ function GrantAccessDialog({
       open={member !== null}
       onOpenChange={(o) => !o && onClose()}
       title={member?.has_login ? `Change access for ${member.full_name}` : `Give ${member?.full_name ?? ""} app access`}
-      description="They sign in with this email address and a password they set themselves."
+      description={
+        IS_PASSWORD_AUTH
+          ? "They sign in with this email address and the password you set here."
+          : "They sign in with this email address and a password they set themselves."
+      }
       footer={
         <>
           <NFButton variant="secondary" onClick={onClose}>
@@ -477,6 +485,27 @@ function GrantAccessDialog({
             ))}
           </NFSelect>
         </NFField>
+
+        {IS_PASSWORD_AUTH && (
+          <NFField
+            label={member?.has_login ? "New password" : "Password"}
+            htmlFor="fa-password"
+            error={errors.password?.message}
+            hint={member?.has_login ? "Leave blank to keep their current password." : PASSWORD_HINT}
+            required={!member?.has_login}
+          >
+            <NFInput
+              id="fa-password"
+              type="password"
+              autoComplete="new-password"
+              invalid={!!errors.password}
+              {...register("password", {
+                required: member?.has_login ? false : "Set the password they will sign in with.",
+                ...newPasswordRules,
+              })}
+            />
+          </NFField>
+        )}
 
         <p className="text-xs text-[var(--nf-text-subtle)]">
           Whatever you choose, they only ever see this flat.

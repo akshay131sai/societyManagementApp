@@ -67,11 +67,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for line in (
             "=" * 78,
             "  SECURITY WARNING — DEVELOPMENT AUTHENTICATION IS ACTIVE",
-            "  Any 'dev:<email>' bearer token is accepted with NO credential check.",
+            "  /auth/login accepts any 'dev:<email>' with NO credential check.",
             "  Set AUTH_PROVIDER=firebase before exposing this service.",
             "=" * 78,
         ):
             log.warning("app.dev_auth_banner", banner=line)
+
+    if settings.JWT_SECRET_KEY is None:
+        log.warning(
+            "app.dev_jwt_secret",
+            message="JWT_SECRET_KEY is unset; signing tokens with the public development key.",
+        )
 
     get_central_engine()
     get_token_verifier()

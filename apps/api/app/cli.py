@@ -2,6 +2,7 @@
 
     python -m app.cli bootstrap            create super admin + default plans
     python -m app.cli create-super-admin   add a platform administrator
+    python -m app.cli set-password         set an account's sign-in password
     python -m app.cli migrate-tenants      roll tenant migrations across societies
     python -m app.cli list-societies       registry overview
     python -m app.cli verify-tenant <id>   inspect one tenant database
@@ -123,6 +124,53 @@ async def create_super_admin(email: str, name: str, firebase_uid: str | None) ->
             )
         )
         print(f"  created super admin: {email}")
+    return 0
+
+
+def _read_new_password() -> str:
+    """Prompt twice without echo; read one line from stdin when piped.
+
+    Never a command-line argument: those land in shell history and in the
+    process list for every user on the machine to read.
+    """
+    import getpass
+
+    if not sys.stdin.isatty():
+        return sys.stdin.readline().rstrip("\r\n")
+    first = getpass.getpass("  New password: ")
+    if getpass.getpass("  Repeat it:    ") != first:
+        raise SystemExit("  The passwords did not match.")
+    return first
+
+
+async def set_password(email: str, society_slug: str | None) -> int:
+    """Set the password an account signs in with (``AUTH_PROVIDER=password``)."""
+    from sqlalchemy import func, select
+
+    from app.core.errors import ValidationError
+    from app.models.central import PlatformUser, Society
+    from app.services.credentials import CredentialService
+
+    async with central_session() as session:
+        stmt = select(PlatformUser).where(func.lower(PlatformUser.email) == email.lower())
+        if society_slug:
+            stmt = stmt.join(Society, Society.id == PlatformUser.society_id).where(
+                Society.slug == society_slug
+            )
+        accounts = list(await session.scalars(stmt))
+        if not accounts:
+            print(f"  no account found for {email}" + (f" in {society_slug}" if society_slug else ""))
+            return 1
+        if len(accounts) > 1:
+            print(f"  {email} has accounts in several societies; pass --society <slug>.")
+            return 1
+
+        try:
+            await CredentialService(session).set_password(accounts[0], _read_new_password())
+        except ValidationError as exc:
+            print(f"  {exc.message}")
+            return 1
+        print(f"  password set for {email}; existing sessions signed out")
     return 0
 
 
@@ -327,6 +375,10 @@ def main() -> int:
     p.add_argument("--name", default="Platform Administrator")
     p.add_argument("--firebase-uid", default=None)
 
+    p = sub.add_parser("set-password", help="Set an account's sign-in password (prompts)")
+    p.add_argument("--email", required=True)
+    p.add_argument("--society", default=None, help="society slug, when the email is in several")
+
     p = sub.add_parser("migrate-tenants", help="Run tenant migrations across societies")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--society-id", default=None)
@@ -354,6 +406,8 @@ def main() -> int:
                     return await bootstrap(args.email, args.name, args.firebase_uid)
                 case "create-super-admin":
                     return await create_super_admin(args.email, args.name, args.firebase_uid)
+                case "set-password":
+                    return await set_password(args.email, args.society)
                 case "migrate-tenants":
                     return await migrate_tenants(args.dry_run, args.society_id)
                 case "list-societies":

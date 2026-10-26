@@ -1,16 +1,19 @@
-import { ShieldCheck, Users } from "lucide-react";
+import { KeyRound, ShieldCheck, Users } from "lucide-react";
 import * as React from "react";
 
 import { NFDataTable, NFPagination, NFSearch, type Column } from "@/components/nestflow/data";
 import {
   NFAvatar,
+  NFButton,
   NFCard,
   NFEmptyState,
   NFPageHeader,
   NFSelect,
   NFStatusBadge,
 } from "@/components/nestflow/primitives";
+import { SetPasswordDialog } from "@/features/auth/passwords";
 import { ApiError, api, type Page } from "@/services/api";
+import { IS_PASSWORD_AUTH } from "@/services/auth";
 import type { PlatformUser, Society } from "@/types";
 import { formatDateTime, formatPhone, formatRelative } from "@/utils/format";
 
@@ -24,6 +27,7 @@ export default function PlatformUsersPage() {
   const [q, setQ] = React.useState("");
   const [societyId, setSocietyId] = React.useState("");
   const [debouncedQ, setDebouncedQ] = React.useState("");
+  const [passwordFor, setPasswordFor] = React.useState<PlatformUser | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => {
@@ -121,6 +125,20 @@ export default function PlatformUsersPage() {
       header: "Status",
       render: (u) => <NFStatusBadge status={u.is_active ? "ACTIVE" : "SUSPENDED"} />,
     },
+    ...(IS_PASSWORD_AUTH
+      ? [
+          {
+            key: "actions",
+            header: "",
+            className: "text-right",
+            render: (u: PlatformUser) => (
+              <NFButton variant="ghost" size="sm" onClick={() => setPasswordFor(u)}>
+                <KeyRound /> Set password
+              </NFButton>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -189,6 +207,16 @@ export default function PlatformUsersPage() {
           />
         )}
       </NFCard>
+
+      {passwordFor && (
+        <SetPasswordDialog
+          open
+          onOpenChange={(o) => !o && setPasswordFor(null)}
+          endpoint={`/platform/users/${passwordFor.id}/password`}
+          name={passwordFor.display_name}
+          email={passwordFor.email}
+        />
+      )}
     </>
   );
 }

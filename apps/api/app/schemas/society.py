@@ -12,6 +12,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.schemas.auth import NewPassword
 from app.schemas.platform import IndianMobile, Pincode
 
 
@@ -112,6 +113,9 @@ class TenantUserCreate(BaseModel):
     phone: IndianMobile | None = None
     role_codes: Annotated[list[str], Field(min_length=1)]
     firebase_uid: Annotated[str | None, Field(max_length=128)] = None
+    password: NewPassword | None = None
+    """Initial sign-in password (``AUTH_PROVIDER=password``). Without one the
+    account exists but cannot sign in until a password is set."""
 
 
 class TenantUserUpdate(BaseModel):

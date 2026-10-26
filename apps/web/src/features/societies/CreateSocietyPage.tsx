@@ -13,7 +13,9 @@ import {
   NFPageHeader,
   NFSelect,
 } from "@/components/nestflow/primitives";
+import { PASSWORD_HINT, newPasswordRules } from "@/features/auth/passwords";
 import { ApiError, api } from "@/services/api";
+import { IS_PASSWORD_AUTH } from "@/services/auth";
 import type { SocietyProvisionResult, SubscriptionPlan } from "@/types";
 
 interface FormValues {
@@ -29,6 +31,7 @@ interface FormValues {
   admin_email: string;
   admin_name: string;
   admin_phone: string;
+  admin_password: string;
 }
 
 const INDIAN_STATES = [
@@ -77,6 +80,7 @@ export default function CreateSocietyPage() {
           email: values.admin_email,
           display_name: values.admin_name,
           phone: values.admin_phone || null,
+          ...(IS_PASSWORD_AUTH ? { password: values.admin_password } : {}),
         },
       });
       setResult(created);
@@ -344,6 +348,27 @@ export default function CreateSocietyPage() {
                 })}
               />
             </NFField>
+
+            {IS_PASSWORD_AUTH && (
+              <NFField
+                label="Password"
+                htmlFor="admin_password"
+                error={errors.admin_password?.message}
+                hint={PASSWORD_HINT}
+                required
+              >
+                <NFInput
+                  id="admin_password"
+                  type="password"
+                  autoComplete="new-password"
+                  invalid={!!errors.admin_password}
+                  {...register("admin_password", {
+                    required: "Set the password the administrator will sign in with.",
+                    ...newPasswordRules,
+                  })}
+                />
+              </NFField>
+            )}
           </NFCardBody>
         </NFCard>
 

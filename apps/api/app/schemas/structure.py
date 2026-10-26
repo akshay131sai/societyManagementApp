@@ -18,6 +18,7 @@ from app.models.tenant import (
     OccupancyStatus,
     ResidentType,
 )
+from app.schemas.auth import NewPassword
 from app.schemas.platform import IndianMobile
 
 Code = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9\-]{0,19}$")]
@@ -400,6 +401,8 @@ class FamilyAccessGrant(BaseModel):
     access_level: FamilyAccessLevel
     email: EmailStr | None = None
     """Falls back to the address already on the family member."""
+    password: NewPassword | None = None
+    """Sign-in password for the new login (``AUTH_PROVIDER=password``)."""
 
 
 class ResidentRead(BaseModel):

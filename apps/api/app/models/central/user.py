@@ -52,6 +52,11 @@ class PlatformUser(UUIDPrimaryKeyMixin, TimestampMixin, CentralBase):
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    """scrypt hash, used when ``AUTH_PROVIDER=password``. NULL means the account
+    has no password yet and cannot sign in until an administrator sets one."""
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     __table_args__ = (
         # A super admin scoped to a society is the shape most tenant-escape bugs
         # need. Make it unrepresentable rather than merely untested.

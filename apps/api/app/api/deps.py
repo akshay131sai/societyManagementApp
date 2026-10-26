@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.principal import Principal
 from app.auth.resolver import PrincipalResolver, ResolvedContext
+from app.auth.tokens import decode_access_token
 from app.core.errors import AuthenticationError, AuthorizationError
 from app.core.firebase import FirebaseIdentity, get_token_verifier
 from app.core.logging import firebase_uid_ctx, society_id_ctx
@@ -34,7 +35,11 @@ from app.realtime.outbox import bind_society
 
 log = structlog.get_logger(__name__)
 
-bearer_scheme = HTTPBearer(auto_error=False, description="Firebase ID token")
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    bearerFormat="JWT",
+    description="NestFlow access token from POST /auth/login or /auth/refresh",
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -69,25 +74,26 @@ TenantManager = Annotated[TenantDatabaseManager, Depends(get_manager)]
 # --------------------------------------------------------------------------- #
 
 
-async def get_firebase_identity(
+async def get_identity(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
     ],
 ) -> FirebaseIdentity:
+    """Verify the NestFlow access token. The identity provider is not consulted
+    here — only at ``/auth/login``, which is what issued this token."""
     if credentials is None or not credentials.credentials:
         raise AuthenticationError()
 
-    verifier = get_token_verifier()
-    identity = verifier.verify(credentials.credentials)
+    identity = decode_access_token(credentials.credentials)
     firebase_uid_ctx.set(identity.uid)
     return identity
 
 
-FirebaseIdentityDep = Annotated[FirebaseIdentity, Depends(get_firebase_identity)]
+IdentityDep = Annotated[FirebaseIdentity, Depends(get_identity)]
 
 
 async def get_context(
-    identity: FirebaseIdentityDep,
+    identity: IdentityDep,
     central: CentralSession,
     manager: TenantManager,
     request: Request,

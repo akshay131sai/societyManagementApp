@@ -601,8 +601,9 @@ async def delete_family_member(
         "Creates the tenant user *and* the matching central platform_users row "
         "so the account can authenticate, then assigns the role for the chosen "
         "tier. Re-posting with a different tier moves an existing login.\n\n"
-        "No password is handled here. The account is created with a `pending:` "
-        "placeholder that is bound to a real identity on first sign-in."
+        "With `AUTH_PROVIDER=password`, pass `password` to let the member sign "
+        "in straight away; without it the login exists but cannot be used "
+        "until a society administrator sets one."
     ),
 )
 async def grant_family_access(
@@ -627,23 +628,27 @@ async def grant_family_access(
     # The central row is what makes this account resolvable at sign-in. Same
     # split as create_user in society.py: different database, different session.
     repo = PlatformUserRepository(central)
-    existing = await repo.get_by_email_in_society(member["email"], principal.society_id)
-    if existing is None:
-        await repo.create(
-            PlatformUser(
-                firebase_uid=f"pending:{member['email']}",
-                email=member["email"],
-                phone=member.get("phone"),
-                display_name=member["full_name"],
-                is_super_admin=False,
-                society_id=principal.society_id,
-                tenant_user_id=member["user_id"],
-                is_active=True,
-            )
+    account = await repo.get_by_email_in_society(member["email"], principal.society_id)
+    if account is None:
+        account = PlatformUser(
+            firebase_uid=f"pending:{member['email']}",
+            email=member["email"],
+            phone=member.get("phone"),
+            display_name=member["full_name"],
+            is_super_admin=False,
+            society_id=principal.society_id,
+            tenant_user_id=member["user_id"],
+            is_active=True,
         )
+        await repo.create(account)
     else:
-        existing.tenant_user_id = member["user_id"]
-        existing.is_active = True
+        account.tenant_user_id = member["user_id"]
+        account.is_active = True
+
+    if body.password:
+        from app.services.credentials import CredentialService
+
+        await CredentialService(central).set_password(account, body.password)
 
     return ok(member, message="App access granted.")
 

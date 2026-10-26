@@ -78,6 +78,7 @@ class SocietyService:
                 display_name=payload.admin.display_name,
                 phone=payload.admin.phone,
                 firebase_uid=payload.admin.firebase_uid,
+                password=payload.admin.password,
             ),
             plan_id=payload.plan_id,
             created_by=principal.platform_user_id,

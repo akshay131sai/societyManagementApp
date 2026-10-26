@@ -1,13 +1,21 @@
-import { Mail, Phone, Shield } from "lucide-react";
+import { CheckCircle2, KeyRound, Lock, Mail, Phone, Shield } from "lucide-react";
+import * as React from "react";
+import { useForm } from "react-hook-form";
 
 import {
   NFAvatar,
+  NFButton,
   NFCard,
   NFCardBody,
   NFCardHeader,
+  NFField,
+  NFInput,
   NFPageHeader,
   NFStatusBadge,
 } from "@/components/nestflow/primitives";
+import { PASSWORD_HINT, newPasswordRules, passwordPolicy } from "@/features/auth/passwords";
+import { ApiError } from "@/services/api";
+import { IS_PASSWORD_AUTH, changePassword } from "@/services/auth";
 import { useAppSelector } from "@/store";
 
 export default function ProfilePage() {
@@ -54,6 +62,8 @@ export default function ProfilePage() {
             </NFCardBody>
           </NFCard>
 
+          {IS_PASSWORD_AUTH && <ChangePasswordCard />}
+
           <NFCard>
             <NFCardHeader
               title="Permissions"
@@ -77,6 +87,140 @@ export default function ProfilePage() {
         </div>
       </div>
     </>
+  );
+}
+
+interface PasswordForm {
+  current_password: string;
+  new_password: string;
+  confirm: string;
+}
+
+function ChangePasswordCard() {
+  const [done, setDone] = React.useState(false);
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    getValues,
+    formState: { errors, isSubmitting },
+  } = useForm<PasswordForm>({
+    defaultValues: { current_password: "", new_password: "", confirm: "" },
+  });
+
+  const onSubmit = handleSubmit(async (values) => {
+    setDone(false);
+    setFormError(null);
+    try {
+      await changePassword(values.current_password, values.new_password);
+      reset();
+      setDone(true);
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fieldErrors).length) {
+        for (const [field, message] of Object.entries(e.fieldErrors)) {
+          if (field === "current_password" || field === "new_password") {
+            setError(field, { message });
+          }
+        }
+      } else {
+        setFormError(e instanceof ApiError ? e.message : "Could not change your password.");
+      }
+    }
+  });
+
+  return (
+    <NFCard>
+      <NFCardHeader
+        title="Password"
+        description="Changing it signs you out on every other device."
+      />
+      <NFCardBody>
+        <form onSubmit={onSubmit} className="grid gap-4 sm:max-w-sm" noValidate>
+          {formError && (
+            <p
+              role="alert"
+              className="rounded-[var(--nf-radius-sm)] bg-[var(--nf-danger-subtle)] px-3 py-2 text-[13px] text-[var(--nf-danger)]"
+            >
+              {formError}
+            </p>
+          )}
+          {done && (
+            <p
+              role="status"
+              className="flex items-center gap-2 rounded-[var(--nf-radius-sm)] bg-[var(--nf-success-subtle)] px-3 py-2 text-[13px] text-[var(--nf-success)]"
+            >
+              <CheckCircle2 className="size-4" aria-hidden /> Password changed.
+            </p>
+          )}
+
+          <NFField
+            label="Current password"
+            htmlFor="current_password"
+            error={errors.current_password?.message}
+            required
+          >
+            <NFInput
+              id="current_password"
+              type="password"
+              autoComplete="current-password"
+              leadingIcon={<Lock />}
+              invalid={!!errors.current_password}
+              {...register("current_password", { required: "Enter your current password." })}
+            />
+          </NFField>
+
+          <NFField
+            label="New password"
+            htmlFor="new_password"
+            error={errors.new_password?.message}
+            hint={PASSWORD_HINT}
+            required
+          >
+            <NFInput
+              id="new_password"
+              type="password"
+              autoComplete="new-password"
+              leadingIcon={<KeyRound />}
+              invalid={!!errors.new_password}
+              {...register("new_password", {
+                required: "Choose a new password.",
+                ...newPasswordRules,
+                validate: (value: string) => {
+                  const policy = passwordPolicy(value);
+                  if (policy !== true) return policy;
+                  return (
+                    value !== getValues("current_password") ||
+                    "Choose a password different from the current one."
+                  );
+                },
+              })}
+            />
+          </NFField>
+
+          <NFField label="Repeat new password" htmlFor="confirm" error={errors.confirm?.message} required>
+            <NFInput
+              id="confirm"
+              type="password"
+              autoComplete="new-password"
+              leadingIcon={<KeyRound />}
+              invalid={!!errors.confirm}
+              {...register("confirm", {
+                required: "Repeat the new password.",
+                validate: (v) => v === getValues("new_password") || "The passwords do not match.",
+              })}
+            />
+          </NFField>
+
+          <div>
+            <NFButton type="submit" loading={isSubmitting}>
+              Change password
+            </NFButton>
+          </div>
+        </form>
+      </NFCardBody>
+    </NFCard>
   );
 }
 

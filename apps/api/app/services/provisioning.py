@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.passwords import hash_password
 from app.core.errors import AlreadyExistsError, NotFoundError, ProvisioningFailedError
 from app.core.permissions import (
     PERMISSION_DESCRIPTIONS,
@@ -69,6 +70,8 @@ class SocietyAdminSpec:
     firebase_uid: str | None = None
     """When absent, a ``pending:`` placeholder is stored and bound on first
     sign-in (see ``PrincipalResolver._link_by_email``)."""
+    password: str | None = field(default=None, repr=False)
+    """Initial password for ``AUTH_PROVIDER=password``; hashed on the central row."""
 
 
 @dataclass(slots=True)
@@ -524,6 +527,9 @@ class ProvisioningService:
         if existing is not None:
             if tenant_user_id is not None:
                 existing.tenant_user_id = tenant_user_id
+            if admin.password and existing.password_hash is None:
+                existing.password_hash = hash_password(admin.password)
+                existing.password_changed_at = datetime.now(timezone.utc)
             await self.central.flush()
             return existing
 
@@ -536,6 +542,8 @@ class ProvisioningService:
             society_id=society.id,
             tenant_user_id=tenant_user_id,
             is_active=True,
+            password_hash=hash_password(admin.password) if admin.password else None,
+            password_changed_at=datetime.now(timezone.utc) if admin.password else None,
         )
         await repo.create(user)
 

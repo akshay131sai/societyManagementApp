@@ -21,6 +21,10 @@ subscription expiry takes effect on the *next request*, not the next hour.
 The only thing NestFlow takes from the verified token is the `firebase_uid`
 (and `email` / `email_verified` for first-time linking).
 
+The identity token is checked **once**, at `POST /auth/login`. From then on the
+client carries NestFlow's own session tokens (section 2a); the identity
+provider is not consulted again until the next sign-in.
+
 ## 2. Flow
 
 ```
@@ -30,11 +34,14 @@ The only thing NestFlow takes from the verified token is the `firebase_uid`
    |                    |-- signIn ------------>|                     |
    |                    |<-- ID token (JWT) ----|                     |
    |                    |                       |                     |
-   |                    |-- GET /auth/me ------------------------------>|
-   |                    |   Authorization: Bearer <id-token>          |
-   |                    |                       |                     |
+   |                    |-- POST /auth/login {id_token} --------------->|
    |                    |                       |<-- verify_id_token -|
    |                    |                       |--- uid, email ----->|
+   |                    |<-- access_token + refresh_token -------------|
+   |                    |                                             |
+   |                    |-- GET /auth/me ------------------------------>|
+   |                    |   Authorization: Bearer <access-token>      |
+   |                    |                    [ verify JWT signature ] |
    |                    |                                             |
    |                    |                    [ central DB lookup ]    |
    |                    |                    platform_users           |
@@ -48,10 +55,40 @@ The only thing NestFlow takes from the verified token is the `firebase_uid`
    |                    |<-- Principal + theme + nav ------------------|
 ```
 
-The client stores **no** NestFlow session. The Firebase SDK holds the refresh
-token and mints a fresh ID token; the API client attaches
-`Authorization: Bearer <token>` to every request and retries once on a 401 after
-forcing a token refresh.
+## 2a. Session tokens
+
+`app/auth/tokens.py` issues two HS256 JWTs signed with `JWT_SECRET_KEY`:
+
+| | Access token | Refresh token |
+|---|---|---|
+| Lifetime | `ACCESS_TOKEN_TTL_MINUTES` (15) | `REFRESH_TOKEN_TTL_DAYS` (14) |
+| Sent to | every endpoint, as `Authorization: Bearer` (and `?token=` on `/ws`) | `POST /auth/refresh`, `POST /auth/logout` only |
+| Claims | `sub` (provider uid), `email`, `pid`, `typ=access` | `sub` (platform user id), `jti`, `fam`, `typ=refresh` |
+| Server state | none — verified by signature | one `refresh_tokens` row per `jti` |
+| Client storage | memory | `localStorage` |
+
+Both carry `iss`, `aud`, `iat`, `exp` and `jti`; `typ` is checked so neither can
+stand in for the other. The access token carries **identity only** — roles,
+society and subscription are still resolved from PostgreSQL per request
+(section 4), so a lock or role change does not wait for the token to expire.
+
+**Rotation and reuse detection.** Every `/auth/refresh` retires the presented
+token (`revoked_at`, `replaced_by`) and issues a new one in the same family.
+Presenting a retired token again means a copy exists: the whole family is
+revoked and the request fails with `TOKEN_REVOKED`. Other sign-ins (another
+device) are separate families and unaffected. `/auth/logout` revokes the
+family; access tokens already issued live out their 15 minutes.
+
+**Disabling a user** takes effect on their next request (the resolver checks
+`is_active`) and their next refresh (which revokes the family).
+
+**Client** (`apps/web/src/services/tokens.ts`): refreshes 30 s before expiry and
+retries a request once after a `TOKEN_EXPIRED`/`TOKEN_INVALID` 401. Because
+each refresh token works once, refreshes are serialised across tabs with the
+Web Locks API and the token is re-read from storage inside the lock; without
+that, two tabs refreshing together would trip reuse detection and sign the
+user out. A refused refresh, or a sign-out in another tab, returns the app to
+the login screen.
 
 ## 3. Token verification
 
@@ -168,8 +205,9 @@ AUTH_PROVIDER=firebase   -> FirebaseTokenVerifier   (production)
 AUTH_PROVIDER=dev        -> DevTokenVerifier        (local only)
 ```
 
-`DevTokenVerifier` accepts `dev:<email>` as a bearer token and returns a
-synthetic identity. It exists so Phase 1 is fully runnable and testable before
+`DevTokenVerifier` accepts `dev:<email>` as the `id_token` for `/auth/login`
+and returns a synthetic identity. It is not accepted as a bearer token on any
+other route. It exists so Phase 1 is fully runnable and testable before
 Firebase credentials exist.
 
 Three independent safeties, so this cannot reach production:

@@ -20,7 +20,7 @@
 
 import * as React from "react";
 
-import { getIdToken } from "@/services/auth";
+import { getAccessToken } from "@/services/auth";
 import type { RealtimeMessage } from "@/types";
 
 const BASE_DELAY_MS = 1_000;
@@ -65,7 +65,7 @@ export function useRealtime({ enabled, onNotification, onReconnect }: RealtimeOp
     async function open() {
       if (closed || document.hidden) return;
 
-      const token = await getIdToken();
+      const token = await getAccessToken().catch(() => null);
       if (!token || closed) return;
 
       socket = new WebSocket(socketUrl(token));

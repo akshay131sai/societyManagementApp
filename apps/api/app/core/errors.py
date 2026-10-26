@@ -21,6 +21,7 @@ class ErrorCode(StrEnum):
     TOKEN_EXPIRED = "TOKEN_EXPIRED"
     TOKEN_REVOKED = "TOKEN_REVOKED"
     USER_NOT_REGISTERED = "USER_NOT_REGISTERED"
+    INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
 
     # --- Authorization (403) ------------------------------------------------
     PERMISSION_DENIED = "PERMISSION_DENIED"
@@ -105,6 +106,14 @@ class TokenExpiredError(AuthenticationError):
 class TokenRevokedError(AuthenticationError):
     code = ErrorCode.TOKEN_REVOKED
     message = "Your session was ended. Please sign in again."
+
+
+class InvalidCredentialsError(AuthenticationError):
+    """Wrong email, wrong password, or no password set — deliberately one
+    answer, so the login form cannot be used to discover which emails exist."""
+
+    code = ErrorCode.INVALID_CREDENTIALS
+    message = "That email address or password is not correct."
 
 
 class UserNotRegisteredError(AuthenticationError):

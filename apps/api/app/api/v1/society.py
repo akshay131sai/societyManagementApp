@@ -20,7 +20,9 @@ from app.api.deps import (
     require_permission,
 )
 from app.auth.principal import Principal
+from app.core.errors import NotFoundError
 from app.core.permissions import Permission
+from app.schemas.auth import PasswordSet
 from app.schemas.common import Envelope, Page, PageParams, ok
 from app.schemas.society import (
     RoleWithPermissions,
@@ -221,22 +223,26 @@ async def create_user(
 
     # The central row is what makes this account resolvable at sign-in.
     repo = PlatformUserRepository(central)
-    existing = await repo.get_by_email_in_society(str(body.email), principal.society_id)
-    if existing is None:
-        await repo.create(
-            PlatformUser(
-                firebase_uid=body.firebase_uid or f"pending:{str(body.email).lower()}",
-                email=str(body.email).lower(),
-                phone=body.phone,
-                display_name=body.full_name,
-                is_super_admin=False,
-                society_id=principal.society_id,
-                tenant_user_id=user["id"],
-                is_active=True,
-            )
+    account = await repo.get_by_email_in_society(str(body.email), principal.society_id)
+    if account is None:
+        account = PlatformUser(
+            firebase_uid=body.firebase_uid or f"pending:{str(body.email).lower()}",
+            email=str(body.email).lower(),
+            phone=body.phone,
+            display_name=body.full_name,
+            is_super_admin=False,
+            society_id=principal.society_id,
+            tenant_user_id=user["id"],
+            is_active=True,
         )
+        await repo.create(account)
     else:
-        existing.tenant_user_id = user["id"]
+        account.tenant_user_id = user["id"]
+
+    if body.password:
+        from app.services.credentials import CredentialService
+
+        await CredentialService(central).set_password(account, body.password)
 
     return ok(user, message="User created.")
 
@@ -264,6 +270,45 @@ async def update_user(
         user_id, body, principal, request_id=_rid(request)
     )
     return ok(user, message="User updated.")
+
+
+@router.post(
+    "/users/{user_id}/password",
+    response_model=Envelope[dict],
+    summary="Set or reset a user's password",
+    description=(
+        "Sets the password the user signs in with and signs them out of every "
+        "device. Requires `user.update` and `role.assign`: whoever can reset a "
+        "password can sign in as that person, which is an administrator's power, "
+        "not a profile editor's."
+    ),
+)
+async def set_user_password(
+    user_id: uuid.UUID,
+    body: PasswordSet,
+    tenant: TenantSession,
+    central: CentralSession,
+    principal: Annotated[
+        Principal,
+        Depends(require_permission(Permission.USER_UPDATE, Permission.ROLE_ASSIGN)),
+    ],
+) -> dict[str, Any]:
+    from sqlalchemy import select
+
+    from app.models.central import PlatformUser
+    from app.services.credentials import CredentialService
+
+    await TenantUserService(tenant).get(user_id)  # 404 for a user outside this society
+    account = await central.scalar(
+        select(PlatformUser).where(
+            PlatformUser.tenant_user_id == user_id,
+            PlatformUser.society_id == principal.society_id,
+        )
+    )
+    if account is None:
+        raise NotFoundError("This user has no sign-in account.")
+    await CredentialService(central).set_password(account, body.password)
+    return ok({"password_set": True}, message="Password updated.")
 
 
 @router.put(

@@ -10,6 +10,7 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 
 import { ApiError, api } from "@/services/api";
 import * as authService from "@/services/auth";
+import { SessionError } from "@/services/tokens";
 import type {
   MeResponse,
   NavItem,
@@ -67,8 +68,10 @@ export const signIn = createAsyncThunk<
   try {
     await authService.signInWithEmail(email, password);
   } catch (error) {
+    // A refusal from /auth/login keeps its code (USER_NOT_REGISTERED,
+    // USER_DISABLED) so the router can pick the right screen.
     return rejectWithValue({
-      code: "SIGN_IN_FAILED",
+      code: error instanceof SessionError ? error.code : "SIGN_IN_FAILED",
       message: authService.describeAuthError(error),
     });
   }

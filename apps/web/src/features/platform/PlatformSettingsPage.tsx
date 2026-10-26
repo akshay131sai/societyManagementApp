@@ -108,9 +108,9 @@ export default function PlatformSettingsPage() {
         >
           <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           <p>
-            <span className="font-semibold">Development authentication is active.</span> Any{" "}
-            <code className="font-mono">dev:&lt;email&gt;</code> bearer token is accepted without a
-            credential check. Set <code className="font-mono">AUTH_PROVIDER=firebase</code> before
+            <span className="font-semibold">Development authentication is active.</span> Sign-in
+            accepts any <code className="font-mono">dev:&lt;email&gt;</code> without a credential
+            check. Set <code className="font-mono">AUTH_PROVIDER=firebase</code> before
             exposing this service.
           </p>
         </div>

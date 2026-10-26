@@ -31,7 +31,7 @@ import {
   NFSkeleton,
   NFStatusBadge,
 } from "@/components/nestflow/primitives";
-import { getIdToken } from "@/services/auth";
+import { getAccessToken } from "@/services/auth";
 import { ApiError, api } from "@/services/api";
 import type { ReportColumn, ReportMeta, ReportResult } from "@/types";
 import { cn } from "@/utils/cn";
@@ -127,7 +127,7 @@ export default function ReportsPage() {
       if (fromDate) query.set("from_date", fromDate);
       if (toDate) query.set("to_date", toDate);
 
-      const token = await getIdToken();
+      const token = await getAccessToken();
       const response = await fetch(
         `${base}/reports/${active}/export${query.size ? `?${query}` : ""}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },

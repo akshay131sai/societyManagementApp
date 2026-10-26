@@ -1,4 +1,8 @@
-"""Authentication endpoints."""
+"""Authentication endpoints.
+
+``/login``, ``/refresh`` and ``/logout`` are the only routes that take no
+access token — each carries its own credential in the body.
+"""
 
 from __future__ import annotations
 
@@ -8,16 +12,141 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from app.api.deps import CentralSession, ContextDep, PrincipalDep, TenantManager
+from app.auth.passwords import verify_password
+from app.auth.resolver import PrincipalResolver
+from app.auth.tokens import SessionService
+from app.core.config import AuthProvider, get_settings
+from app.core.errors import InvalidCredentialsError, TokenInvalidError, ValidationError
 from app.core.firebase import get_token_verifier
+from app.models.central import PlatformUser
 from app.models.central.audit import AuditAction
 from app.repositories.central import PlatformUserRepository
 from app.repositories.tenant import ThemeRepository
-from app.schemas.auth import MeResponse, SessionResponse
+from app.schemas.auth import (
+    LoginRequest,
+    LogoutResponse,
+    MeResponse,
+    PasswordChange,
+    RefreshRequest,
+    SessionResponse,
+    TokenResponse,
+)
 from app.schemas.common import Envelope, ok
 from app.services.audit import AuditService
+from app.services.credentials import CredentialService
 from app.services.navigation import build_navigation
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _client(request: Request) -> dict[str, str | None]:
+    return {
+        "ip_address": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
+@router.post(
+    "/login",
+    response_model=Envelope[TokenResponse],
+    summary="Exchange an identity token for a NestFlow session",
+    description=(
+        "Verifies the identity provider's token (a Firebase ID token, or "
+        "`dev:<email>` in development) and returns an access token and a "
+        "refresh token. Send the access token as `Authorization: Bearer` on "
+        "every other request. Society and subscription gates are applied by "
+        "those requests, so a locked society still signs in and is shown its "
+        "lock screen by `/auth/me`."
+    ),
+)
+async def login(
+    body: LoginRequest,
+    request: Request,
+    central: CentralSession,
+    manager: TenantManager,
+) -> dict[str, Any]:
+    if get_settings().AUTH_PROVIDER is AuthProvider.PASSWORD:
+        if not body.email or not body.password:
+            raise InvalidCredentialsError("Enter your email address and password.")
+        user = await CredentialService(central).authenticate(body.email, body.password)
+    else:
+        if not body.id_token:
+            raise TokenInvalidError("An identity token is required to sign in.")
+        identity = get_token_verifier().verify(body.id_token)
+        user = await PrincipalResolver(central, manager).load_platform_user(identity)
+
+    pair = await SessionService(central).start(user, **_client(request))
+    return ok(pair.as_response())
+
+
+@router.post(
+    "/password",
+    response_model=Envelope[TokenResponse],
+    summary="Change your own password",
+    description=(
+        "Requires the current password. Every session for the account is "
+        "signed out, and a fresh pair is returned for the device that made "
+        "the change."
+    ),
+)
+async def change_password(
+    body: PasswordChange,
+    request: Request,
+    principal: PrincipalDep,
+    central: CentralSession,
+) -> dict[str, Any]:
+    if get_settings().AUTH_PROVIDER is not AuthProvider.PASSWORD:
+        raise ValidationError(
+            "Passwords are managed by the sign-in provider on this server."
+        )
+    user = await central.get(PlatformUser, principal.platform_user_id)
+    assert user is not None
+    if not verify_password(body.current_password, user.password_hash):
+        raise ValidationError(
+            "Your current password is not correct.",
+            details={
+                "fields": [
+                    {"field": "current_password", "message": "Your current password is not correct."}
+                ]
+            },
+        )
+    service = CredentialService(central)
+    await service.set_password(user, body.new_password, field="new_password")
+    pair = await SessionService(central).start(user, **_client(request))
+    return ok(pair.as_response(), message="Password changed.")
+
+
+@router.post(
+    "/refresh",
+    response_model=Envelope[TokenResponse],
+    summary="Rotate a refresh token",
+    description=(
+        "Returns a new access token and a new refresh token. The presented "
+        "refresh token is retired; presenting it again signs out every "
+        "session descended from the same sign-in."
+    ),
+)
+async def refresh(
+    body: RefreshRequest,
+    request: Request,
+    central: CentralSession,
+) -> dict[str, Any]:
+    pair = await SessionService(central).rotate(body.refresh_token, **_client(request))
+    return ok(pair.as_response())
+
+
+@router.post(
+    "/logout",
+    response_model=Envelope[LogoutResponse],
+    summary="End a session",
+    description=(
+        "Revokes the refresh token and every token rotated from the same "
+        "sign-in. Access tokens already issued stay valid until they expire."
+    ),
+)
+async def logout(body: RefreshRequest, central: CentralSession) -> dict[str, Any]:
+    await SessionService(central).revoke(body.refresh_token)
+    return ok({"signed_out": True})
 
 
 @router.get(

@@ -20,6 +20,7 @@ from app.models.central import (
     SocietyStatus,
     SubscriptionStatus,
 )
+from app.schemas.auth import NewPassword
 
 Pincode = Annotated[str, Field(pattern=r"^[1-9][0-9]{5}$", description="6-digit Indian PIN")]
 IndianMobile = Annotated[
@@ -39,6 +40,8 @@ class SocietyAdminCreate(BaseModel):
     firebase_uid: Annotated[str | None, Field(max_length=128)] = None
     """Optional. When absent the account is created in a ``pending:`` state and
     bound to a Firebase UID on the admin's first sign-in."""
+    password: NewPassword | None = None
+    """Initial sign-in password (``AUTH_PROVIDER=password``)."""
 
 
 class SocietyCreate(BaseModel):

@@ -160,9 +160,10 @@ async def _authenticate(token: str) -> Principal:
     because the token expires and the next handshake is refused.
     """
     from app.auth.resolver import PrincipalResolver
+    from app.auth.tokens import decode_access_token
 
     verifier = get_token_verifier()
-    identity = verifier.verify(token)
+    identity = decode_access_token(token)
 
     factory = get_central_sessionmaker()
     async with factory() as central:
